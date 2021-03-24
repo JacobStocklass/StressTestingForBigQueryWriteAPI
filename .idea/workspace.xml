@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="32d72867-7deb-4ac2-a1f1-d56ae0689849" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/StressTest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/pom.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/src/main/java/com/GoogleLLC/App$Job.class" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/src/main/java/com/GoogleLLC/App.class" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/src/main/java/com/GoogleLLC/App.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/src/test/java/com/GoogleLLC/AppTest.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/StressTest-1.0-SNAPSHOT.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/classes/com/GoogleLLC/App$1.class" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/classes/com/GoogleLLC/App$Job.class" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/classes/com/GoogleLLC/App$RowComplexity.class" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/classes/com/GoogleLLC/App.class" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/maven-archiver/pom.properties" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/createdFiles.lst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/inputFiles.lst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/surefire-reports/StressTest.StressTest.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/surefire-reports/TEST-StressTest.StressTest.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/surefire-reports/TEST-com.GoogleLLC.AppTest.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/surefire-reports/com.GoogleLLC.AppTest.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/StressTest/target/test-classes/com/GoogleLLC/AppTest.class" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="G3PluginsProjectSettings">
+    <appliedSettings>
+      <entry key="LinkifyInternalShortlinks" value="true" />
+      <entry key="RecognizedNullableAnnotations" value="true" />
+    </appliedSettings>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="JupyterTrust" id="f79f95ee-5ef8-42a4-9fb9-b1b9c49268d1" />
+  <component name="MavenImportPreferences">
+    <option name="generalSettings">
+      <MavenGeneralSettings>
+        <option name="mavenHome" value="$APPLICATION_HOME_DIR$/plugins/maven/lib/maven3" />
+      </MavenGeneralSettings>
+    </option>
+    <option name="importingSettings">
+      <MavenImportingSettings>
+        <option name="downloadSourcesAutomatically" value="true" />
+      </MavenImportingSettings>
+    </option>
+  </component>
+  <component name="ProjectId" id="1qAdJzjW3951yt3pjtl9jIfpimy" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="aspect.path.notification.shown" value="true" />
+    <property name="go.import.settings.migrated" value="true" />
+    <property name="node.js.detected.package.eslint" value="true" />
+    <property name="node.js.detected.package.tslint" value="true" />
+    <property name="node.js.path.for.package.eslint" value="project" />
+    <property name="node.js.path.for.package.tslint" value="project" />
+    <property name="node.js.selected.package.eslint" value="(autodetect)" />
+    <property name="node.js.selected.package.tslint" value="(autodetect)" />
+    <property name="nodejs_package_manager_path" value="npm" />
+    <property name="settings.editor.selected.configurable" value="reference.settings.project.maven.importing" />
+  </component>
+  <component name="RunManager">
+    <configuration default="true" type="ArquillianJUnit" factoryName="" nameIsGenerated="true">
+      <option name="arquillianRunConfiguration">
+        <value>
+          <option name="containerStateName" value="" />
+        </value>
+      </option>
+      <option name="TEST_OBJECT" value="class" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="32d72867-7deb-4ac2-a1f1-d56ae0689849" name="Default Changelist" comment="" />
+      <created>1616526263916</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1616526263916</updated>
+      <workItem from="1616526267234" duration="1018000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

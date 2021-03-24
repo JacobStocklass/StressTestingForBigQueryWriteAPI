@@ -1,3 +1,20 @@
+/*
+ * Copyright 2021 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.GoogleLLC;
 
 import com.google.api.gax.rpc.ServerStream;
@@ -63,7 +80,7 @@ public class App {
     private static BigQueryWriteClient client;
     private static String parentProjectId;
     private static BigQuery bigquery;
-    private static int requestLimit = 10000;
+    private static int requestLimit = 10;
 
     @GuardedBy("this")
     private long inflightCount = 0;
@@ -81,7 +98,6 @@ public class App {
             case SIMPLE:
                 object.put("test_str", "aaa");
                 object.put("test_numerics", new JSONArray(new String[] {"1234", "-900000"}));
-                object.put("test_datetime", String.valueOf(LocalDateTime.now()));
                 break;
             case COMPLEX:
                 object.put("test_str", "aaa");
@@ -124,7 +140,6 @@ public class App {
                             "81", "82", "83", "84", "85", "86", "87", "88", "89", "90", "91", "92", "93",
                             "94", "95", "96", "97", "98", "99", "100"
                         }));
-                object.put("test_datetime", String.valueOf(LocalDateTime.now()));
                 object.put(
                     "test_bools",
                     new JSONArray(
@@ -165,9 +180,6 @@ public class App {
                         com.google.cloud.bigquery.Field.newBuilder(
                             "test_numerics", StandardSQLTypeName.NUMERIC)
                             .setMode(Field.Mode.REPEATED)
-                            .build(),
-                        com.google.cloud.bigquery.Field.newBuilder(
-                            "test_datetime", StandardSQLTypeName.DATETIME)
                             .build())))
                 .build();
         bigquery.create(tableInfo);
@@ -190,7 +202,6 @@ public class App {
                         Field.newBuilder("test_numerics3", StandardSQLTypeName.NUMERIC)
                             .setMode(Mode.REPEATED)
                             .build(),
-                        Field.newBuilder("test_datetime", StandardSQLTypeName.DATETIME).build(),
                         Field.newBuilder("test_bools", StandardSQLTypeName.BOOL)
                             .setMode(Mode.REPEATED)
                             .build(),
@@ -229,126 +240,357 @@ public class App {
         }
     }
 
-    public static class Job implements Runnable {
-        private String stream;
-        private String readerCell;
-        private ArrayList<String> output;
-        public Job(String stream, String readerCell, ArrayList<String> output) {
-            this.stream = stream;
-            this.readerCell = readerCell;
-            this.output = output;
-        }
-        public void run() {
-            BigQueryReadClient client;
-            try {
-                client = BigQueryReadClient.create();
-            } catch (Exception e) {
-                System.exit(1);
-                return;
-            }
+    public static void testDefaultStreamSimpleSchema()
+        throws IOException, InterruptedException, ExecutionException,
+        Descriptors.DescriptorValidationException {
+        LOG.info(
+            String.format(
+                "%s tests running with parent project: %s",
+                App.class.getSimpleName(), parentProjectId));
 
-            long firstResponseTime = 0;
-            long totalResponseTime = 0;
-            long totalResponses = 0;
-            long totalBytes = 0;
-            long totalRows = 0;
+        String tableName = "JsonSimpleTableDefaultStream";
+        TableInfo tableInfo = MakeSimpleSchemaTable(tableName);
 
-            long requestStart = System.nanoTime();
-            ServerStream<ReadRowsResponse> stream =
-                client
-                    .readRowsCallable()
-                    .call(ReadRowsRequest.newBuilder().setReadStream(this.stream).build());
-            long responseStart = requestStart;
-            for (ReadRowsResponse response : stream) {
-                long responseEnd = System.nanoTime();
-
-                if (firstResponseTime == 0) {
-                    firstResponseTime = responseEnd - requestStart;
-                    totalResponseTime += firstResponseTime;
-                } else {
-                    totalResponseTime += responseEnd - responseStart;
+        long averageLatency = 0;
+        long totalLatency = 0;
+        TableName parent = TableName.of(ServiceOptions.getDefaultProjectId(), dataset, tableName);
+        try (JsonStreamWriter jsonStreamWriter =
+            JsonStreamWriter.newBuilder(parent.toString(), tableInfo.getDefinition().getSchema())
+                .createDefaultStream()
+                .build()) {
+            for (int i = 0; i < requestLimit; i++) {
+                JSONObject row = MakeJsonObject(RowComplexity.SIMPLE);
+                JSONArray jsonArr = new JSONArray(new JSONObject[] {row});
+                long startTime = System.nanoTime();
+                ApiFuture<AppendRowsResponse> response = jsonStreamWriter.append(jsonArr, -1);
+                long finishTime = System.nanoTime();
+                if (response.get().getAppendResult().hasOffset() != false) {
+                    LOG.info("Response has offset: error");
                 }
-                totalResponses++;
-                if (response.hasAvroRows()) {
-                    totalBytes += response.getAvroRows().getSerializedBinaryRows().size();
-                } else {
-                    totalBytes += response.getArrowRecordBatch().getSerializedRecordBatch().size();
+                totalLatency += (finishTime - startTime);
+            }
+            averageLatency = totalLatency / (requestLimit - 1);
+            // TODO(jstocklass): Is there a better way to get this than to log it?
+            LOG.info("Simple average Latency: " + String.valueOf(averageLatency) + " ns");
+            averageLatency = totalLatency = 0;
+
+            TableResult result =
+                bigquery.listTableData(
+                    tableInfo.getTableId(), BigQuery.TableDataListOption.startIndex(0L));
+            Iterator<FieldValueList> iter = result.getValues().iterator();
+            FieldValueList currentRow;
+            for (int i = 0; i < requestLimit; i++) {
+                if(!iter.hasNext()){
+                    LOG.info("Error: iter does not have next");
                 }
-                totalRows += response.getRowCount();
-
-                responseStart = System.nanoTime();
+                currentRow = iter.next();
+                if (currentRow.get(0).getStringValue() == ""){
+                    LOG.info("Error: a row is blank.");
+                }
             }
-
-            synchronized (output) {
-                output.add(
-                    getMetric(
-                        "stream_read_time", nanoToSeconds(System.nanoTime() - requestStart),
-                        readerCell));
-                output.add(
-                    getMetric("first_response_time", nanoToSeconds(firstResponseTime), readerCell));
-                output.add(
-                    getMetric("total_response_time", nanoToSeconds(totalResponseTime), readerCell));
-                output.add(
-                    getMetric(
-                        "bytes_per_second", totalBytes / nanoToSeconds(totalResponseTime),
-                        readerCell));
-                output.add(
-                    getMetric("rows_per_second", totalRows / nanoToSeconds(totalResponseTime),
-                        readerCell));
-                output.add(
-                    getMetric(
-                        "responses_per_second",
-                        totalResponses / nanoToSeconds(totalResponseTime),
-                        readerCell));
-            }
-
-            client.shutdownNow();
-        }
-
-        public static double nanoToSeconds(long value) {
-            return ((double) value) / (1.0e9);
-        }
-
-        public static String getMetric(String name, double value, String reader_cell) {
-            JSONObject metric = new JSONObject();
-            metric.put("name", name);
-            metric.put("value", value);
-            metric.put("time", Instant.now().getEpochSecond());
-            metric.put("reader_cell", reader_cell);
-            return metric.toString();
         }
     }
 
+    public static void testDefaultStreamComplexSchema()
+        throws IOException, InterruptedException, ExecutionException,
+        Descriptors.DescriptorValidationException {
+        StandardSQLTypeName[] array = new StandardSQLTypeName[] {StandardSQLTypeName.INT64};
+        String complexTableName = "JsonComplexTableDefaultStream";
+        TableInfo tableInfo = MakeComplexSchemaTable(complexTableName);
+        long totalLatency = 0;
+        long averageLatency = 0;
+        TableName parent =
+            TableName.of(ServiceOptions.getDefaultProjectId(), dataset, complexTableName);
+        try (JsonStreamWriter jsonStreamWriter =
+            JsonStreamWriter.newBuilder(parent.toString(), tableInfo.getDefinition().getSchema())
+                .createDefaultStream()
+                .build()) {
+            for (int i = 0; i < requestLimit; i++) {
+                JSONObject row = MakeJsonObject(RowComplexity.COMPLEX);
+                JSONArray jsonArr = new JSONArray(new JSONObject[] {row});
+                long startTime = System.nanoTime();
+                ApiFuture<AppendRowsResponse> response = jsonStreamWriter.append(jsonArr, -1);
+                long finishTime = System.nanoTime();
+                if (response.get().getAppendResult().hasOffset()) {
+                    LOG.info("Error: response has offset");
+                }
+                if (i != 0) {
+                    totalLatency += (finishTime - startTime);
+                }
+            }
+            averageLatency = totalLatency / (requestLimit - 1);
+            LOG.info("Complex average Latency: " + String.valueOf(averageLatency) + " ns");
+            TableResult result2 =
+                bigquery.listTableData(
+                    tableInfo.getTableId(), BigQuery.TableDataListOption.startIndex(0L));
+            Iterator<FieldValueList> iter = result2.getValues().iterator();
+            FieldValueList currentRow;
+            for (int i = 0; i < requestLimit; i++) {
+                if(!iter.hasNext()){
+                    LOG.info("Error: iter does not have next");
+                }
+                currentRow = iter.next();
+                if (currentRow.get(0).getStringValue() == ""){
+                    LOG.info("Error: a row is blank.");
+                }
+            }
+        }
+    }
+
+//    public void testDefaultStreamAsyncSimpleSchema()
+//        throws IOException, InterruptedException, ExecutionException,
+//        Descriptors.DescriptorValidationException {
+//        String tableName = "JsonSimpleAsyncTableDefaultStream";
+//        TableInfo tableInfo = MakeSimpleSchemaTable(tableName);
+//        final List<Long> startTimes = new ArrayList<Long>(requestLimit);
+//        final List<Long> finishTimes = new ArrayList<Long>(requestLimit);
+//        long averageLatency = 0;
+//        long totalLatency = 0;
+//        inflightCount = 0;
+//        failureCount = 0;
+//        successCount = 0;
+//        final TableName parent = TableName.of(ServiceOptions.getDefaultProjectId(), dataset, tableName);
+//        try (JsonStreamWriter jsonStreamWriter =
+//            JsonStreamWriter.newBuilder(parent.toString(), tableInfo.getDefinition().getSchema())
+//                .createDefaultStream()
+//                .build()) {
+//            for (int i = 0; i < requestLimit; i++) {
+//                JSONObject row = MakeJsonObject(RowComplexity.SIMPLE);
+//                JSONArray jsonArr = new JSONArray(new JSONObject[] {row});
+//                startTimes.add(System.nanoTime());
+//                ApiFuture<AppendRowsResponse> response = jsonStreamWriter.append(jsonArr, -1);
+//                synchronized (this){
+//                    inflightCount++;
+//                }
+//                ApiFutures.addCallback(
+//                    response,
+//                    new ApiFutureCallback<AppendRowsResponse>() {
+//                        @Override
+//                        public void onFailure(Throwable t) {
+//                            inflightCount--;
+//                            failureCount++;
+//                            LOG.info("Error: api future callback on failure.");
+//                        }
+//
+//                        @Override
+//                        public void onSuccess(AppendRowsResponse result) {
+//                            finishTimes.add(System.nanoTime());
+//                            inflightCount--;
+//                            successCount++;
+//                        }
+//                    },
+//                    MoreExecutors.directExecutor());
+//                if (response.get().getAppendResult().hasOffset()) {
+//                    LOG.info("Error: response has offset");
+//                }
+//            }
+//            while (inflightCount > 0) {
+//                LOG.info("Waiting...");
+//            }
+//            for (int i = 0; i < requestLimit; i++) {
+//                totalLatency += (finishTimes.get(i) - startTimes.get(i));
+//            }
+//            averageLatency = totalLatency / requestLimit;
+//            LOG.info("Simple Async average Latency: " + String.valueOf(averageLatency) + " ns");
+//            TableResult result2 =
+//                bigquery.listTableData(
+//                    tableInfo.getTableId(), BigQuery.TableDataListOption.startIndex(0L));
+//            Iterator<FieldValueList> iter = result2.getValues().iterator();
+//            FieldValueList currentRow;
+//            for (int i = 0; i < requestLimit; i++) {
+//                if(!iter.hasNext()){
+//                    LOG.info("Error: iter does not have next");
+//                }
+//                currentRow = iter.next();
+//                if (currentRow.get(0).getStringValue() == ""){
+//                    LOG.info("Error: a row is blank.");
+//                }
+//            }
+//        }
+//    }
+//
+//    public void testDefaultStreamAsyncComplexSchema()
+//        throws IOException, InterruptedException, ExecutionException,
+//        Descriptors.DescriptorValidationException {
+//        StandardSQLTypeName[] array = new StandardSQLTypeName[] {StandardSQLTypeName.INT64};
+//        String complexTableName = "JsonAsyncTableDefaultStream";
+//        TableInfo tableInfo = MakeComplexSchemaTable(complexTableName);
+//        final List<Long> startTimes = new ArrayList<Long>(requestLimit);
+//        final List<Long> finishTimes = new ArrayList<Long>(requestLimit);
+//        long averageLatency = 0;
+//        long totalLatency = 0;
+//        inflightCount = 0;
+//        failureCount = 0;
+//        successCount = 0;
+//        TableName parent =
+//            TableName.of(ServiceOptions.getDefaultProjectId(), dataset, complexTableName);
+//        try (JsonStreamWriter jsonStreamWriter =
+//            JsonStreamWriter.newBuilder(parent.toString(), tableInfo.getDefinition().getSchema())
+//                .createDefaultStream()
+//                .build()) {
+//            for (int i = 0; i < requestLimit; i++) {
+//                JSONObject row = MakeJsonObject(RowComplexity.COMPLEX);
+//                JSONArray jsonArr = new JSONArray(new JSONObject[] {row});
+//                startTimes.add(System.nanoTime());
+//                ApiFuture<AppendRowsResponse> response = jsonStreamWriter.append(jsonArr, -1);
+//                synchronized (this){
+//                    inflightCount++;
+//                }
+//                ApiFutures.addCallback(
+//                    response,
+//                    new ApiFutureCallback<AppendRowsResponse>() {
+//                        @Override
+//                        public void onFailure(Throwable t) {
+//                            inflightCount--;
+//                            failureCount++;
+//                            LOG.info("Error: api future callback on failure.");
+//                        }
+//
+//                        @Override
+//                        public void onSuccess(AppendRowsResponse result) {
+//                            finishTimes.add(System.nanoTime());
+//                            inflightCount--;
+//                            successCount++;
+//                        }
+//                    },
+//                    MoreExecutors.directExecutor());
+//                if (response.get().getAppendResult().hasOffset()) {
+//                    LOG.info("Error: response has offset");
+//                }
+//            }
+//            while (inflightCount > 0) {
+//                LOG.info("Waiting...");
+//            }
+//            for (int i = 0; i < requestLimit; i++) {
+//                totalLatency += (finishTimes.get(i) - startTimes.get(i));
+//                if (finishTimes.get(i) == 0) {
+//                    LOG.info("We have a problem");
+//                }
+//            }
+//            averageLatency = totalLatency / requestLimit;
+//            LOG.info("Complex Async average Latency: " + String.valueOf(averageLatency) + " ns");
+//            TableResult result =
+//                bigquery.listTableData(
+//                    tableInfo.getTableId(), BigQuery.TableDataListOption.startIndex(0L));
+//            Iterator<FieldValueList> iter = result.getValues().iterator();
+//            FieldValueList currentRow;
+//            for (int i = 0; i < requestLimit; i++) {
+//                if(!iter.hasNext()){
+//                    LOG.info("Error: iter does not have next");
+//                }
+//                currentRow = iter.next();
+//                if (currentRow.get(0).getStringValue() == ""){
+//                    LOG.info("Error: a row is blank.");
+//                }
+//            }
+//        }
+//    }
+
+
+//    public static class Job implements Runnable {
+//        private String stream;
+//        private String readerCell;
+//        private ArrayList<String> output;
+//        public Job(String stream, String readerCell, ArrayList<String> output) {
+//            this.stream = stream;
+//            this.readerCell = readerCell;
+//            this.output = output;
+//        }
+//        public void run() {
+//            BigQueryReadClient client;
+//            try {
+//                client = BigQueryReadClient.create();
+//            } catch (Exception e) {
+//                System.exit(1);
+//                return;
+//            }
+//
+//            long firstResponseTime = 0;
+//            long totalResponseTime = 0;
+//            long totalResponses = 0;
+//            long totalBytes = 0;
+//            long totalRows = 0;
+//
+//            long requestStart = System.nanoTime();
+//            ServerStream<ReadRowsResponse> stream =
+//                client
+//                    .readRowsCallable()
+//                    .call(ReadRowsRequest.newBuilder().setReadStream(this.stream).build());
+//            long responseStart = requestStart;
+//            for (ReadRowsResponse response : stream) {
+//                long responseEnd = System.nanoTime();
+//
+//                if (firstResponseTime == 0) {
+//                    firstResponseTime = responseEnd - requestStart;
+//                    totalResponseTime += firstResponseTime;
+//                } else {
+//                    totalResponseTime += responseEnd - responseStart;
+//                }
+//                totalResponses++;
+//                if (response.hasAvroRows()) {
+//                    totalBytes += response.getAvroRows().getSerializedBinaryRows().size();
+//                } else {
+//                    totalBytes += response.getArrowRecordBatch().getSerializedRecordBatch().size();
+//                }
+//                totalRows += response.getRowCount();
+//
+//                responseStart = System.nanoTime();
+//            }
+//
+//            synchronized (output) {
+//                output.add(
+//                    getMetric(
+//                        "stream_read_time", nanoToSeconds(System.nanoTime() - requestStart),
+//                        readerCell));
+//                output.add(
+//                    getMetric("first_response_time", nanoToSeconds(firstResponseTime), readerCell));
+//                output.add(
+//                    getMetric("total_response_time", nanoToSeconds(totalResponseTime), readerCell));
+//                output.add(
+//                    getMetric(
+//                        "bytes_per_second", totalBytes / nanoToSeconds(totalResponseTime),
+//                        readerCell));
+//                output.add(
+//                    getMetric("rows_per_second", totalRows / nanoToSeconds(totalResponseTime),
+//                        readerCell));
+//                output.add(
+//                    getMetric(
+//                        "responses_per_second",
+//                        totalResponses / nanoToSeconds(totalResponseTime),
+//                        readerCell));
+//            }
+//
+//            client.shutdownNow();
+//        }
+//
+//        public static double nanoToSeconds(long value) {
+//            return ((double) value) / (1.0e9);
+//        }
+//
+//        public static String getMetric(String name, double value, String reader_cell) {
+//            JSONObject metric = new JSONObject();
+//            metric.put("name", name);
+//            metric.put("value", value);
+//            metric.put("time", Instant.now().getEpochSecond());
+//            metric.put("reader_cell", reader_cell);
+//            return metric.toString();
+//        }
+//    }
+
     public static void main(String[] args) throws Exception {
         LOG.info("Running main method");
-        // Run all of the stress "Testing" here. It's not really testing it's just gathering
-        // Data on how the performance goes. Tests that catch breakage should already be going
-        // before the code ever reaches here.
         LOG.info("Running before class");
         beforeClass();
+        //This is where the testing is going to actually happen now!
+        LOG.info("Running Default Stream Simple Schema");
+        testDefaultStreamSimpleSchema();
+        LOG.info("Running Default Stream Complex Schema");
+        testDefaultStreamComplexSchema();
+//        LOG.info("Running Default Stream Simple Schema");
+//        testDefaultStreamAsyncSimpleSchema();
+//        LOG.info("Running Default Stream Complex Schema");
+//        testDefaultStreamAsyncComplexSchema();
         LOG.info("Running after class");
         afterClass();
-//        String inputName = "yeet";  //args[0];
-//        String outputName = "gang";  //args[1];
-//
-//        ExecutorService pool = Executors
-//            .newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-//
-//        ArrayList<String> output = new ArrayList<String>();
-//        BufferedReader input = new BufferedReader(new FileReader(inputName));
-//        for (String line; (line = input.readLine()) != null; ) {
-//            JSONObject obj = new JSONObject(line);
-//            Job job = new Job(obj.getString("stream"), obj.getString("reader_cell"), output);
-//            pool.submit(job);
-//        }
-//
-//        pool.shutdown();
-//        while (!pool.isTerminated()) {
-//            Thread.sleep(1000);
-//        }
-//
-//        synchronized (output) {
-//            Files.write(Paths.get(outputName), output);
-//        }
     }
 }
